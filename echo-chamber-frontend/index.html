@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echo Chamber: Resonance Rumble</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-overlay">
+            <div id="crosshair">+</div>
+            <div id="health-bar">
+                <div id="health-fill"></div>
+            </div>
+            <div id="ammo-counter">Pulses: 5</div>
+        </div>
+        <div id="start-screen" class="screen">
+            <h1>Echo Chamber</h1>
+            <h2>Resonance Rumble</h2>
+            <button id="start-button">Start Game</button>
+        </div>
+        <div id="death-screen" class="screen hidden">
+            <h2>Silence Falls</h2>
+            <p>You were eliminated</p>
+            <button id="restart-button">Try Again</button>
+        </div>
+    </div>
+
+    <!-- Import Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Game Scripts -->
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
