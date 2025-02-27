@@ -24,15 +24,12 @@ export class Game {
         
         // Create components
         this.audioManager = new AudioManager(this.camera);
-        this.networkManager = new NetworkManager(this);
         this.world = new World(this.scene);
         this.player = new Player(this.camera, this.scene, this.audioManager);
+        this.networkManager = new NetworkManager(this);
         
         // Set up controls
         this.controls = setupControls(this.camera, this.canvas);
-        
-        // Create bot manager
-        this.botManager = new BotManager(this.scene, this.world, this.audioManager);
         
         // Game state
         this.remotePlayers = {};
@@ -89,15 +86,18 @@ export class Game {
         this.player.position.set(0, 1.7, 0);
         this.camera.position.copy(this.player.position);
         
+        // Initialize AudioManager with scene (needed for visualizations)
+        this.audioManager.setScene(this.scene);
+        
+        // Initialize BotManager
+        this.botManager = new BotManager(this.scene, this.world, this.audioManager);
+        this.botManager.init();
+        
         // Listen for pulse-added events from local player
         document.addEventListener('pulse-added', (event) => {
             const pulse = event.detail.pulse;
             this.addPulse(pulse);
-
-            this.audioManager.setScene(this.scene);
-            this.botManager.init();
-
-
+            
             // Notify server about new pulse
             this.networkManager.sendPulseCreated(pulse);
         });
@@ -185,33 +185,13 @@ export class Game {
         
         // Update sonic pulses
         this.updatePulses(deltaTime);
-
-        this.gameLoop = function(deltaTime) {
-            // Update controls
-            if (this.controls.isLocked()) {
-                this.controls.update(deltaTime);
-            }
-            
-            // Update player
-            this.player.update(deltaTime, this.world);
-            
-            // Send player position to server
-            this.networkManager.sendPlayerPosition();
-            
-            // Update remote players
-            for (const id in this.remotePlayers) {
-                this.remotePlayers[id].update(deltaTime);
-                this.remotePlayers[id].alignHealthBarToCamera(this.camera);
-            }
-            
-            // Update sonic pulses
-            this.updatePulses(deltaTime);
-            
-            // Add this line to update bots
+        
+        // Update bots
+        if (this.botManager) {
             this.botManager.update(deltaTime, this.player);
         }
     }
-
+    
     updatePulses(deltaTime) {
         // Update existing pulses
         for (let i = this.pulses.length - 1; i >= 0; i--) {
@@ -246,6 +226,25 @@ export class Game {
                     this.scene.remove(pulse.mesh);
                     this.pulses.splice(i, 1);
                     break;
+                }
+            }
+            
+            // Check for collisions with bots
+            if (this.botManager && this.botManager.bots) {
+                for (const bot of this.botManager.bots) {
+                    // Ignore pulses fired by the bot itself
+                    if (pulse.sourceEnemy === bot) continue;
+                    
+                    // Simple distance-based collision check
+                    const distance = bot.position.distanceTo(pulse.position);
+                    if (distance < 1.0) { // Bot size + pulse size
+                        bot.takeDamage(pulse.getDamage());
+                        
+                        // Remove pulse after hit
+                        this.scene.remove(pulse.mesh);
+                        this.pulses.splice(i, 1);
+                        break;
+                    }
                 }
             }
             
@@ -458,7 +457,9 @@ export class Game {
         }
         
         // Update bot difficulty
-        this.botManager.setDifficulty(settings.difficulty);
+        if (this.botManager) {
+            this.botManager.setDifficulty(settings.difficulty);
+        }
         
         console.log("Game settings updated:", settings);
     }

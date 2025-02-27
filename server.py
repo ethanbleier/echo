@@ -147,11 +147,13 @@ async def handle_message(websocket, player_id, message):
             player_pulses.append(pulse)
             
             # Broadcast the pulse to all players
+            pulse_message = json.dumps({
+                "type": "new_pulse",
+                "pulse": pulse
+            })
+            
             for ws in connected_players.values():
-                await ws.send(json.dumps({
-                    "type": "new_pulse",
-                    "pulse": pulse
-                }))
+                await ws.send(pulse_message)
         
         elif message_type == "damage":
             # Apply damage to a player
@@ -166,12 +168,14 @@ async def handle_message(websocket, player_id, message):
                     player_health[target_id] = 0
                 
                 # Broadcast health update
+                health_message = json.dumps({
+                    "type": "health_update",
+                    "id": target_id,
+                    "health": player_health[target_id]
+                })
+                
                 for ws in connected_players.values():
-                    await ws.send(json.dumps({
-                        "type": "health_update",
-                        "id": target_id,
-                        "health": player_health[target_id]
-                    }))
+                    await ws.send(health_message)
                 
                 # If player is dead, respawn them
                 if player_health[target_id] <= 0:
@@ -208,6 +212,8 @@ async def game_server(websocket):
             await handle_message(websocket, player_id, message)
     except websockets.exceptions.ConnectionClosedError:
         pass
+    except Exception as e:
+        logging.error(f"Error handling connection: {e}")
     finally:
         await unregister_player(player_id)
 

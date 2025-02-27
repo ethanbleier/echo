@@ -11,6 +11,16 @@ export class AudioManager {
         // Set default volume
         this.masterVolume = 0.75; // 75%
         
+        // Track sound visualizations to clean them up properly
+        this.visualizations = [];
+        
+        // Track loaded state
+        this.isAudioInitialized = false;
+        this.pendingSounds = [];
+        
+        // Scene reference (needed for 3D sounds)
+        this.scene = null;
+        
         // Load sound files
         this.preloadSounds();
     }
@@ -48,37 +58,38 @@ export class AudioManager {
         
         // Loop through sound files and load them
         for (const [name, path] of Object.entries(soundFiles)) {
-            // Check if file exists before loading (using fetch head request)
-            fetch(path, { method: 'HEAD' })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`File not found: ${path} (status: ${response.status})`);
-                    }
+            // Create fallback sound immediately in case file doesn't exist
+            this.createFallbackSound(name);
+            
+            // Attempt to load the actual sound file
+            audioLoader.load(
+                path,
+                (buffer) => {
+                    // Store the buffer for later use
+                    this.buffers[name] = buffer;
+                    this.loadedSounds++;
+                    console.log(`Loaded sound: ${name} (${this.loadedSounds}/${this.totalSounds})`);
                     
-                    // File exists, proceed with loading
-                    audioLoader.load(
-                        path,
-                        (buffer) => {
-                            // Store the buffer for later use
-                            this.buffers[name] = buffer;
-                            this.loadedSounds++;
-                            console.log(`Loaded sound: ${name} (${this.loadedSounds}/${this.totalSounds})`);
-                        },
-                        (xhr) => {
-                            // Progress tracking - silent to reduce console noise
-                        },
-                        (error) => {
-                            console.error(`Failed to load sound "${name}" from path "${path}": ${error}`);
-                            // Create fallback sound as the file exists but couldn't be loaded
-                            this.createFallbackSound(name);
+                    // Mark as initialized when all sounds are loaded
+                    if (this.loadedSounds === this.totalSounds) {
+                        this.isAudioInitialized = true;
+                        
+                        // Play any pending sounds
+                        for (const pendingSound of this.pendingSounds) {
+                            this.playSound(pendingSound.name, pendingSound.position);
                         }
-                    );
-                })
-                .catch(error => {
-                    console.error(`Error checking sound file: ${error}`);
-                    console.log(`Creating fallback sound for: ${name}`);
-                    this.createFallbackSound(name);
-                });
+                        this.pendingSounds = [];
+                    }
+                },
+                (xhr) => {
+                    // Progress tracking - silent to reduce console noise
+                },
+                (error) => {
+                    console.error(`Failed to load sound "${name}" from path "${path}": ${error}`);
+                    // Note: We already created a fallback sound above
+                    this.loadedSounds++;
+                }
+            );
         }
     }
     
@@ -128,7 +139,7 @@ export class AudioManager {
     }
     
     playSound(name, position = null) {
-        // Check if audio is initialized
+        // Queue sound if audio not initialized
         if (!this.isAudioInitialized) {
             console.log(`Sound "${name}" queued - waiting for audio initialization`);
             this.pendingSounds.push({ name, position });
@@ -144,7 +155,7 @@ export class AudioManager {
         let sound;
         
         // If position is provided, create a positional audio source
-        if (position) {
+        if (position && this.scene) {
             // Create a positional audio object
             sound = new THREE.PositionalAudio(this.listener);
             sound.setVolume(this.masterVolume);
@@ -164,7 +175,9 @@ export class AudioManager {
             
             // Remove the mesh after the sound finishes playing
             sound.onEnded = () => {
-                this.scene.remove(mesh);
+                if (this.scene && mesh.parent) {
+                    this.scene.remove(mesh);
+                }
             };
             
             // Create visual sound indicator (optional)
@@ -184,9 +197,13 @@ export class AudioManager {
             sound.setVolume(this.masterVolume);
             sound.play();
         }
+        
+        return sound;
     }
     
     createSoundVisualizer(position) {
+        if (!this.scene) return; // Ensure scene is available
+        
         // Create a small sphere to visualize sound source
         const geometry = new THREE.SphereGeometry(0.1, 8, 8);
         const material = new THREE.MeshBasicMaterial({
@@ -203,34 +220,54 @@ export class AudioManager {
         group.add(sphere);
         this.scene.add(group);
         
-        // Animate the sound visualizer
+        // Track visualization for cleanup
+        this.visualizations.push(group);
+        
+        // Animation vars
         const startTime = performance.now();
+        const duration = 0.5; // 500ms animation
         
         const animate = () => {
+            // Skip if scene has been removed
+            if (!this.scene) return;
+            
             const elapsed = (performance.now() - startTime) / 1000;
-            if (elapsed > 0.5) {
-                this.scene.remove(group);
+            if (elapsed > duration) {
+                // Remove from scene and tracking array
+                if (group.parent) {
+                    this.scene.remove(group);
+                }
+                const index = this.visualizations.indexOf(group);
+                if (index > -1) {
+                    this.visualizations.splice(index, 1);
+                }
                 return;
             }
             
             const scale = 1 + elapsed * 4;
             sphere.scale.set(scale, scale, scale);
-            sphere.material.opacity = 0.5 * (1 - elapsed / 0.5);
+            sphere.material.opacity = 0.5 * (1 - elapsed / duration);
             
+            // Continue animation
             requestAnimationFrame(animate);
         };
         
-        animate();
+        // Start animation
+        requestAnimationFrame(animate);
     }
     
     createPulseRipple(position, intensity) {
+        if (!this.scene) return; // Ensure scene is available
+        
         // Create visual effect for sonic pulse impacts
         const ringCount = 3;
         
         for (let i = 0; i < ringCount; i++) {
             // Staggered creation of rings
             setTimeout(() => {
-                this.createRippleRing(position, intensity, i);
+                if (this.scene) { // Double-check scene is still available
+                    this.createRippleRing(position, intensity, i);
+                }
             }, i * 100);
         }
         
@@ -239,6 +276,8 @@ export class AudioManager {
     }
     
     createRippleRing(position, intensity, index) {
+        if (!this.scene) return;
+        
         // Create a ring geometry
         const innerRadius = 0.1;
         const outerRadius = 0.2;
@@ -262,16 +301,29 @@ export class AudioManager {
         ring.rotation.z = Math.random() * Math.PI;
         
         this.scene.add(ring);
+        this.visualizations.push(ring);
         
-        // Animate the ring
+        // Animation variables
         const startTime = performance.now();
         const duration = 1.0 + (index * 0.2);
         const maxRadius = 2.0 + (intensity * 0.5) + (index * 0.5);
         
         const animateRing = () => {
+            // Check if scene still exists
+            if (!this.scene) return;
+            
             const elapsed = (performance.now() - startTime) / 1000;
             if (elapsed > duration) {
-                this.scene.remove(ring);
+                // Remove ring
+                if (ring.parent) {
+                    this.scene.remove(ring);
+                }
+                
+                // Remove from tracking array
+                const index = this.visualizations.indexOf(ring);
+                if (index > -1) {
+                    this.visualizations.splice(index, 1);
+                }
                 return;
             }
             
@@ -282,14 +334,32 @@ export class AudioManager {
             // Fade out as it expands
             ring.material.opacity = 0.7 * (1 - progress);
             
+            // Continue animation
             requestAnimationFrame(animateRing);
         };
         
-        animateRing();
+        // Start animation
+        requestAnimationFrame(animateRing);
     }
     
     // Store scene reference for visualizations
     setScene(scene) {
         this.scene = scene;
+        
+        // Clear existing visualizations if scene changes
+        this.clearVisualizations();
+    }
+    
+    // Clean up all visualizations
+    clearVisualizations() {
+        if (!this.scene) return;
+        
+        for (const viz of this.visualizations) {
+            if (viz.parent) {
+                this.scene.remove(viz);
+            }
+        }
+        
+        this.visualizations = [];
     }
 }

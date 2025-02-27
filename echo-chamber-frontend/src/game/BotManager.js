@@ -1,5 +1,3 @@
-// Create a new file: src/game/BotManager.js
-
 import { AIBot } from './AIBot.js';
 
 export class BotManager {
@@ -14,6 +12,9 @@ export class BotManager {
         this.botDifficulty = 'medium'; // Default difficulty
         this.spawnPoints = [];
         this.active = false;
+        
+        // Animation management
+        this.activeAnimations = new Map(); // To track ongoing animations
     }
     
     init() {
@@ -215,6 +216,7 @@ export class BotManager {
     createBotSpawnEffect(position) {
         // Create teleport-in effect
         const ringCount = 5;
+        const rings = [];
         
         for (let i = 0; i < ringCount; i++) {
             // Create ring geometry
@@ -235,41 +237,76 @@ export class BotManager {
             ring.rotation.x = -Math.PI / 2;
             
             this.scene.add(ring);
-            
-            // Animate ring
-            const startTime = performance.now();
-            const duration = 1.0;
-            
-            const animateRing = () => {
-                const elapsed = (performance.now() - startTime) / 1000;
-                if (elapsed > duration) {
-                    this.scene.remove(ring);
-                    return;
-                }
-                
-                const progress = elapsed / duration;
-                
-                // Shrink the ring
-                const scale = 3 * (1 - progress);
-                ring.scale.set(scale, scale, scale);
-                
-                // Fade out at the end
-                ring.material.opacity = 0.7 * (1 - Math.pow(progress, 2));
-                
-                // Move upward
-                ring.position.y = position.y - 1 + progress * 4;
-                
-                requestAnimationFrame(animateRing);
-            };
-            
-            // Start animation with a delay based on index
-            setTimeout(() => {
-                animateRing();
-            }, i * 150);
+            rings.push(ring);
         }
         
-        // Add a flash at the end
+        // Create a unique ID for this animation
+        const animationId = 'spawn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        
+        // Animate rings with a single animation loop
+        const startTime = performance.now();
+        const duration = 1.5; // Total duration for all rings
+        
+        const animateRings = () => {
+            // Stop animation if the manager is no longer active
+            if (!this.active) {
+                // Clean up any remaining rings
+                rings.forEach(ring => {
+                    if (ring.parent) this.scene.remove(ring);
+                });
+                this.activeAnimations.delete(animationId);
+                return;
+            }
+            
+            const elapsed = (performance.now() - startTime) / 1000;
+            
+            if (elapsed > duration) {
+                // Remove all rings when animation is complete
+                rings.forEach(ring => {
+                    if (ring.parent) this.scene.remove(ring);
+                });
+                this.activeAnimations.delete(animationId);
+                return;
+            }
+            
+            // Update each ring based on its own timing
+            rings.forEach((ring, index) => {
+                // Stagger ring animations
+                const ringDelay = index * 0.15;
+                const ringElapsed = elapsed - ringDelay;
+                
+                if (ringElapsed > 0 && ringElapsed < 1.0) {
+                    const progress = ringElapsed;
+                    
+                    // Shrink the ring
+                    const scale = 3 * (1 - progress);
+                    ring.scale.set(scale, scale, scale);
+                    
+                    // Fade out at the end
+                    ring.material.opacity = 0.7 * (1 - Math.pow(progress, 2));
+                    
+                    // Move upward
+                    ring.position.y = position.y - 1 + progress * 4;
+                } else if (ringElapsed >= 1.0 && ring.parent) {
+                    // Remove ring when its animation is done
+                    this.scene.remove(ring);
+                }
+            });
+            
+            // Continue animation
+            if (this.activeAnimations.has(animationId)) {
+                requestAnimationFrame(this.activeAnimations.get(animationId));
+            }
+        };
+        
+        // Store animation function and start it
+        this.activeAnimations.set(animationId, animateRings);
+        requestAnimationFrame(animateRings);
+        
+        // Create a flash at the end
         setTimeout(() => {
+            if (!this.active) return; // Skip if no longer active
+            
             const flashGeometry = new THREE.SphereGeometry(1, 16, 16);
             const flashMaterial = new THREE.MeshBasicMaterial({
                 color: 0xE74C3C,
@@ -281,18 +318,28 @@ export class BotManager {
             flash.position.copy(position);
             this.scene.add(flash);
             
+            // Create a unique ID for flash animation
+            const flashId = 'flash_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+            
             // Animate flash
-            const startTime = performance.now();
-            const duration = 0.5;
+            const flashStartTime = performance.now();
+            const flashDuration = 0.5;
             
             const animateFlash = () => {
-                const elapsed = (performance.now() - startTime) / 1000;
-                if (elapsed > duration) {
-                    this.scene.remove(flash);
+                if (!this.active) {
+                    if (flash.parent) this.scene.remove(flash);
+                    this.activeAnimations.delete(flashId);
                     return;
                 }
                 
-                const progress = elapsed / duration;
+                const elapsed = (performance.now() - flashStartTime) / 1000;
+                if (elapsed > flashDuration) {
+                    this.scene.remove(flash);
+                    this.activeAnimations.delete(flashId);
+                    return;
+                }
+                
+                const progress = elapsed / flashDuration;
                 
                 // Expand then contract
                 const scale = 3 * progress * (1 - progress) * 4 + 0.5;
@@ -301,10 +348,14 @@ export class BotManager {
                 // Fade out
                 flash.material.opacity = 0.8 * (1 - progress);
                 
-                requestAnimationFrame(animateFlash);
+                if (this.activeAnimations.has(flashId)) {
+                    requestAnimationFrame(this.activeAnimations.get(flashId));
+                }
             };
             
-            animateFlash();
+            this.activeAnimations.set(flashId, animateFlash);
+            requestAnimationFrame(animateFlash);
+            
         }, ringCount * 150);
     }
     
@@ -375,18 +426,32 @@ export class BotManager {
         flash.position.copy(position);
         this.scene.add(flash);
         
+        // Create a unique ID for this explosion animation
+        const explosionId = 'explosion_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        
         // Animate fragments and flash
         const startTime = performance.now();
         const duration = 2.0;
         
         const animate = () => {
+            if (!this.active) {
+                // Clean up if manager is no longer active
+                fragments.forEach(fragment => {
+                    if (fragment.parent) this.scene.remove(fragment);
+                });
+                if (flash.parent) this.scene.remove(flash);
+                this.activeAnimations.delete(explosionId);
+                return;
+            }
+            
             const elapsed = (performance.now() - startTime) / 1000;
             if (elapsed > duration) {
                 // Remove all fragments and flash
-                for (const fragment of fragments) {
-                    this.scene.remove(fragment);
-                }
-                this.scene.remove(flash);
+                fragments.forEach(fragment => {
+                    if (fragment.parent) this.scene.remove(fragment);
+                });
+                if (flash.parent) this.scene.remove(flash);
+                this.activeAnimations.delete(explosionId);
                 return;
             }
             
@@ -401,7 +466,7 @@ export class BotManager {
             }
             
             // Update fragments
-            for (const fragment of fragments) {
+            fragments.forEach(fragment => {
                 // Apply velocity
                 fragment.position.add(fragment.userData.velocity.clone().multiplyScalar(0.016));
                 
@@ -416,20 +481,27 @@ export class BotManager {
                 // Fade out
                 const fragProgress = elapsed / duration;
                 fragment.material.opacity = 0.9 * (1 - fragProgress);
-            }
+            });
             
-            requestAnimationFrame(animate);
+            if (this.activeAnimations.has(explosionId)) {
+                requestAnimationFrame(this.activeAnimations.get(explosionId));
+            }
         };
         
-        animate();
+        // Store and start animation
+        this.activeAnimations.set(explosionId, animate);
+        requestAnimationFrame(animate);
     }
     
     setActive(active) {
         this.active = active;
         
-        // If deactivating, remove all bots
+        // If deactivating, remove all bots and cancel all animations
         if (!active) {
             this.removeAllBots();
+            
+            // Cancel all animations
+            this.activeAnimations.clear();
         }
     }
     
