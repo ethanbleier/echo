@@ -19,11 +19,17 @@ export class NetworkManager {
     }
     
     getWebSocketUrl() {
-        // First try: standard WebSocket URL through the proxy
+        // Determine the WebSocket protocol (wss or ws)
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         
-        // Return the PHP proxy URL
+        // Try different connection strategies
+        // 1. First try direct connection if on localhost for development
+        if (host.includes('localhost') || host.includes('127.0.0.1')) {
+            return `${protocol}//${host.split(':')[0]}:8765`;
+        }
+        
+        // 2. Otherwise use the PHP proxy
         return `${protocol}//${host}/ws-proxy.php`;
     }
     

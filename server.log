@@ -1,2 +1,7 @@
 2025-02-26 20:43:40,752 - websockets.server - INFO - server listening on 0.0.0.0:8765
 2025-02-26 20:43:40,752 - root - INFO - Echo Chamber multiplayer server started on 0.0.0.0:8765
+2025-02-26 21:36:55,397 - root - INFO - Received signal 2. Shutting down server...
+2025-02-26 21:36:55,400 - root - INFO - Server task was cancelled
+2025-02-26 21:36:55,400 - root - INFO - Server shutdown complete
+2025-02-26 21:36:56,631 - websockets.server - INFO - server listening on 127.0.0.1:8765
+2025-02-26 21:36:56,631 - root - INFO - Echo Chamber multiplayer server started on 127.0.0.1:8765
