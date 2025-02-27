@@ -218,10 +218,10 @@ export class Player {
         const moveDirection = new THREE.Vector3(0, 0, 0);
         
         if (this.moveForward) {
-            moveDirection.z -= 1;
+            moveDirection.z += 1;
         }
         if (this.moveBackward) {
-            moveDirection.z += 1;
+            moveDirection.z -= 1;
         }
         if (this.moveLeft) {
             moveDirection.x -= 1;
