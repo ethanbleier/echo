@@ -4,7 +4,7 @@ export class NetworkManager {
         this.socket = null;
         this.playerId = null;
         this.connected = false;
-        this.serverUrl = `ws://${window.location.hostname}:8765`;
+        this.serverUrl = 'wss://game.ethanbleier.com';
         this.lastPositionUpdate = 0;
         this.positionUpdateInterval = 100; // 100ms = 10 updates per second
         this.reconnectAttempts = 0;
