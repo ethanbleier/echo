@@ -20,11 +20,17 @@ export class NetworkManager {
     
     // Determine the WebSocket URL based on the current page location
     getWebSocketUrl() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.hostname;
-        const port = 8765; // Default WebSocket port
+        // Try different connection strategies
+        const hostname = window.location.hostname;
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
         
-        return `${protocol}//${host}:${port}`;
+        // For localhost development
+        if (isLocalhost) {
+            return `ws://${hostname}:8765`;
+        }
+        
+        // For production, try without specifying port (assumes proxy is set up)
+        return `wss://${hostname}/ws`;
     }
     
     connect() {
