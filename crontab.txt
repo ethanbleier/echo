@@ -1,0 +1,2 @@
+*/5 * * * * cd /home4/ethanble/public_html/game && php monitor-server.php > /dev/null 2>&1
+

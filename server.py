@@ -9,6 +9,10 @@ import os
 import signal
 import sys
 
+# Get host from environment variable or use localhost
+HOST = os.environ.get('HOST', '127.0.0.1')  # Only accept connections from localhost
+
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -26,17 +30,14 @@ logging.basicConfig(
 PORT = int(os.environ.get('PORT', 8765))
 
 # Get host from environment variable or use default
-# Using 0.0.0.0 to listen on all interfaces, which is important for accepting connections
-HOST = os.environ.get('HOST', '0.0.0.0')
+# Using 127.0.0.1 to only accept connections from localhost
+HOST = os.environ.get('HOST', '127.0.0.1')  # Only accept connections from localhost
 
 # Game state
 connected_players = {}
 player_positions = {}
 player_health = {}
 player_pulses = []
-
-# Main server instance
-server = None
 
 async def register_player(websocket):
     """Register a new player with the game."""
@@ -272,7 +273,6 @@ async def main():
     # Start the game state broadcaster
     broadcast_task = asyncio.create_task(broadcast_game_state())
     
-    # Start the websocket server
     global server
     server = await websockets.serve(
         game_server, 

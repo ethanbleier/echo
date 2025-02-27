@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Proxy Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #log { margin-top: 20px; padding: 10px; background: #f0f0f0; height: 300px; overflow-y: auto; }
+        .success { color: green; }
+        .error { color: red; }
+        button { padding: 10px; margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Proxy Test</h1>
+    <div>
+        <button id="test-proxy">Test HTTP Proxy</button>
+        <button id="test-websocket">Test WebSocket Connection</button>
+    </div>
+    <div id="log"></div>
+
+    <script>
+        function log(message, type = '') {
+            const logElement = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            if (type) entry.classList.add(type);
+            logElement.appendChild(entry);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        // Test HTTP proxy
+        document.getElementById('test-proxy').addEventListener('click', function() {
+            log('Testing HTTP proxy...');
+            fetch('ws-proxy.php?action=test')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        log(`Proxy test successful: ${data.message}`, 'success');
+                    } else {
+                        log(`Proxy test failed: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    log(`Proxy test error: ${error}`, 'error');
+                });
+        });
+
+        // Test WebSocket connection
+        document.getElementById('test-websocket').addEventListener('click', function() {
+            log('Testing WebSocket connection...');
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws-proxy.php`;
+                log(`Connecting to: ${wsUrl}`);
+                
+                const socket = new WebSocket(wsUrl);
+                
+                socket.onopen = function() {
+                    log('WebSocket connection established!', 'success');
+                };
+                
+                socket.onerror = function(error) {
+                    log(`WebSocket error: ${JSON.stringify(error)}`, 'error');
+                };
+                
+                socket.onclose = function(event) {
+                    log(`WebSocket closed: Code: ${event.code}, Reason: ${event.reason}`, 
+                        event.code === 1000 ? 'success' : 'error');
+                };
+                
+                socket.onmessage = function(event) {
+                    log(`Received message: ${event.data}`, 'success');
+                };
+            } catch(e) {
+                log(`Exception: ${e.message}`, 'error');
+            }
+        });
+    </script>
+</body>
+</html>

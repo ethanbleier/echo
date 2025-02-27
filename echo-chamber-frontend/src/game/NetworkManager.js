@@ -18,19 +18,13 @@ export class NetworkManager {
         this.updateConnectionStatus('Connecting to server...');
     }
     
-    // Determine the WebSocket URL based on the current page location
     getWebSocketUrl() {
-        // Try different connection strategies
-        const hostname = window.location.hostname;
-        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+        // First try: standard WebSocket URL through the proxy
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
         
-        // For localhost development
-        if (isLocalhost) {
-            return `ws://${hostname}:8765`;
-        }
-        
-        // For production, try without specifying port (assumes proxy is set up)
-        return `wss://${hostname}/ws`;
+        // Return the PHP proxy URL
+        return `${protocol}//${host}/ws-proxy.php`;
     }
     
     connect() {
