@@ -28,13 +28,17 @@ export class SonicPulse {
         const geometry = new THREE.SphereGeometry(this.radius, 16, 16);
         
         // Create material with glow effect
-        const material = new THREE.MeshBasicMaterial({
+        const material = new THREE.MeshStandardMaterial({
             color: 0x3498db,
             transparent: true,
             opacity: 0.9,
             emissive: 0x3498db,
             emissiveIntensity: 1
         });
+
+        
+        
+        
         
         // Create the mesh
         this.mesh = new THREE.Mesh(geometry, material);

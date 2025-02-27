@@ -17,14 +17,14 @@ const soundVizQuality = document.getElementById('sound-viz-quality');
 
 // Game settings object
 const gameSettings = {
-    gameMode: "singleplayer",
+    gameMode: "multiplayer", // Changed default to multiplayer
     difficulty: "medium",
     volume: 75,
     highQualitySoundViz: true
 };
 
 // Initialize game
-const game = new Game(canvas, gameSettings);
+let game = new Game(canvas, gameSettings);
 
 // Event Listeners
 startButton.addEventListener('click', () => {
@@ -81,6 +81,13 @@ window.addEventListener('resize', () => {
 // Handle player death
 document.addEventListener('player-death', () => {
     deathScreen.classList.remove('hidden');
+});
+
+// Handle page unload/navigation to clean up resources
+window.addEventListener('beforeunload', () => {
+    if (game) {
+        game.cleanup();
+    }
 });
 
 // Initialize game scene

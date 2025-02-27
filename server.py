@@ -6,24 +6,30 @@ import uuid
 import time
 from dotenv import load_dotenv
 import os
+import signal
+import sys
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    format="%(asctime)s %(message)s",
+    format="%(asctime)s %(levelname)s: %(message)s",
     level=logging.INFO,
 )
 
 # Server configuration
 PORT = int(os.getenv("PORT", "8765"))
+HOST = os.getenv("HOST", "0.0.0.0")
 
 # Game state
 connected_players = {}
 player_positions = {}
 player_health = {}
 player_pulses = []
+
+# Main server instance
+server = None
 
 async def register_player(websocket):
     """Register a new player with the game."""
@@ -57,12 +63,16 @@ async def register_player(websocket):
     # Inform other players about the new player
     for existing_id, ws in connected_players.items():
         if existing_id != player_id:
-            await ws.send(json.dumps({
-                "type": "player_joined",
-                "id": player_id,
-                "position": player_positions[player_id],
-                "health": player_health[player_id]
-            }))
+            try:
+                await ws.send(json.dumps({
+                    "type": "player_joined",
+                    "id": player_id,
+                    "position": player_positions[player_id],
+                    "health": player_health[player_id]
+                }))
+            except websockets.exceptions.ConnectionClosed:
+                # Connection might have closed while sending
+                pass
     
     logging.info(f"Player {player_id} connected. Total players: {len(connected_players)}")
     return player_id
@@ -75,38 +85,54 @@ async def unregister_player(player_id):
         del player_health[player_id]
         
         # Inform other players about the disconnection
-        for existing_id, ws in connected_players.items():
-            await ws.send(json.dumps({
-                "type": "player_left",
-                "id": player_id
-            }))
+        disconnect_message = json.dumps({
+            "type": "player_left",
+            "id": player_id
+        })
+        
+        await broadcast_to_all(disconnect_message)
         
         logging.info(f"Player {player_id} disconnected. Remaining players: {len(connected_players)}")
+
+async def broadcast_to_all(message):
+    """Send a message to all connected players."""
+    disconnected = []
+    
+    for player_id, websocket in connected_players.items():
+        try:
+            await websocket.send(message)
+        except websockets.exceptions.ConnectionClosed:
+            # Mark player for removal
+            disconnected.append(player_id)
+    
+    # Remove disconnected players
+    for player_id in disconnected:
+        await unregister_player(player_id)
 
 async def broadcast_game_state():
     """Broadcast player positions to all clients."""
     while True:
-        if connected_players:
-            # Create a single message with all player positions
-            positions_message = {
-                "type": "positions_update",
-                "players": player_positions
-            }
-            positions_json = json.dumps(positions_message)
+        try:
+            if connected_players:
+                # Create a single message with all player positions
+                positions_message = {
+                    "type": "positions_update",
+                    "players": player_positions
+                }
+                positions_json = json.dumps(positions_message)
+                
+                await broadcast_to_all(positions_json)
+                
+                # Clear pulses that are over 5 seconds old
+                current_time = time.time()
+                global player_pulses
+                player_pulses = [p for p in player_pulses if current_time - p["timestamp"] < 5]
             
-            # Send to all connected players
-            websockets_tasks = [
-                ws.send(positions_json) for ws in connected_players.values()
-            ]
-            await asyncio.gather(*websockets_tasks, return_exceptions=True)
-            
-            # Clear pulses that are over 5 seconds old
-            current_time = time.time()
-            global player_pulses
-            player_pulses = [p for p in player_pulses if current_time - p["timestamp"] < 5]
-        
-        # Send updates 10 times per second
-        await asyncio.sleep(0.1)
+            # Send updates 10 times per second
+            await asyncio.sleep(0.1)
+        except Exception as e:
+            logging.error(f"Error in broadcast loop: {e}")
+            await asyncio.sleep(1)  # Wait before trying again
 
 async def handle_message(websocket, player_id, message):
     """Process incoming messages from clients."""
@@ -152,8 +178,7 @@ async def handle_message(websocket, player_id, message):
                 "pulse": pulse
             })
             
-            for ws in connected_players.values():
-                await ws.send(pulse_message)
+            await broadcast_to_all(pulse_message)
         
         elif message_type == "damage":
             # Apply damage to a player
@@ -174,8 +199,7 @@ async def handle_message(websocket, player_id, message):
                     "health": player_health[target_id]
                 })
                 
-                for ws in connected_players.values():
-                    await ws.send(health_message)
+                await broadcast_to_all(health_message)
                 
                 # If player is dead, respawn them
                 if player_health[target_id] <= 0:
@@ -193,10 +217,13 @@ async def handle_message(websocket, player_id, message):
                     
                     # Notify the specific player about respawn
                     if target_id in connected_players:
-                        await connected_players[target_id].send(json.dumps({
-                            "type": "respawn",
-                            "position": player_positions[target_id]
-                        }))
+                        try:
+                            await connected_players[target_id].send(json.dumps({
+                                "type": "respawn",
+                                "position": player_positions[target_id]
+                            }))
+                        except websockets.exceptions.ConnectionClosed:
+                            await unregister_player(target_id)
     
     except json.JSONDecodeError:
         logging.error(f"Invalid JSON from player {player_id}")
@@ -210,22 +237,60 @@ async def game_server(websocket):
     try:
         async for message in websocket:
             await handle_message(websocket, player_id, message)
-    except websockets.exceptions.ConnectionClosedError:
-        pass
+    except websockets.exceptions.ConnectionClosed:
+        logging.info(f"Connection closed for player {player_id}")
     except Exception as e:
-        logging.error(f"Error handling connection: {e}")
+        logging.error(f"Error handling connection for player {player_id}: {e}")
     finally:
         await unregister_player(player_id)
 
+def handle_signal(sig, frame):
+    """Handle shutdown signals gracefully."""
+    logging.info(f"Received signal {sig}. Shutting down server...")
+    
+    # Close the server
+    if server:
+        server.close()
+    
+    # Exit the process
+    sys.exit(0)
+
 async def main():
     """Start the server."""
+    # Register signal handlers
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+    
     # Start the game state broadcaster
-    asyncio.create_task(broadcast_game_state())
+    broadcast_task = asyncio.create_task(broadcast_game_state())
     
     # Start the websocket server
-    async with websockets.serve(game_server, "0.0.0.0", PORT):
-        logging.info(f"Echo Chamber multiplayer server started on port {PORT}")
-        await asyncio.Future()  # Run forever
+    global server
+    server = await websockets.serve(
+        game_server, 
+        HOST, 
+        PORT, 
+        ping_interval=20,  # Send ping every 20 seconds
+        ping_timeout=60    # Wait 60 seconds for pong before considering connection dead
+    )
+    
+    logging.info(f"Echo Chamber multiplayer server started on {HOST}:{PORT}")
+    
+    try:
+        await server.wait_closed()
+    except asyncio.CancelledError:
+        logging.info("Server task was cancelled")
+    finally:
+        broadcast_task.cancel()
+        
+        # Clean up any remaining connections
+        for ws in connected_players.values():
+            await ws.close(1001, "Server shutting down")
+            
+        logging.info("Server shutdown complete")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("Server stopped by keyboard interrupt")

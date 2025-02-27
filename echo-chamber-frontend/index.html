@@ -33,12 +33,12 @@
                     <h3>Game Mode</h3>
                     <div class="radio-group">
                         <label>
-                            <input type="radio" name="gameMode" value="singleplayer" checked>
-                            <span>Singleplayer</span>
+                            <input type="radio" name="gameMode" value="singleplayer">
+                            <span>Singleplayer</span> <small>(Only local)</small>
                         </label>
                         <label>
-                            <input type="radio" name="gameMode" value="multiplayer" disabled>
-                            <span>Multiplayer</span> <small>(Coming Soon)</small>
+                            <input type="radio" name="gameMode" value="multiplayer" checked>
+                            <span>Multiplayer</span>
                         </label>
                     </div>
                 </div>
@@ -80,8 +80,10 @@
         <div id="death-screen" class="screen hidden">
             <h2>Silence Falls</h2>
             <p>You were eliminated</p>
-            <button id="restart-button">Try Again</button>
+            <button id="restart-button" class="primary-button">Try Again</button>
         </div>
+        
+        <div id="connection-status" class="connection-status">Connecting to server...</div>
     </div>
 
     <!-- Import Three.js -->

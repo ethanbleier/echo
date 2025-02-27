@@ -221,6 +221,7 @@ input[type="range"] {
     background-color: #444;
     outline: none;
     -webkit-appearance: none;
+    appearance: none;
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -235,4 +236,50 @@ input[type="range"]::-webkit-slider-thumb {
 #volume-value {
     width: 40px;
     text-align: right;
+}
+
+/* Add these connection status styles to your existing styles.css file */
+
+.connection-status {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    color: #ff9800;
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-family: 'Arial', sans-serif;
+    font-size: 14px;
+    z-index: 1000;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    border: 1px solid #ff9800;
+    pointer-events: none;
+    transition: all 0.3s ease;
+}
+
+.connection-status.connected {
+    color: #4CAF50;
+    border-color: #4CAF50;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Make sure the multiplayer option is enabled in the settings */
+input[type="radio"][value="multiplayer"] {
+    pointer-events: auto;
+    opacity: 1;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .connection-status {
+        font-size: 12px;
+        padding: 8px 16px;
+        width: 80%;
+    }
+    
+    #game-overlay {
+        font-size: 14px !important;
+    }
 }

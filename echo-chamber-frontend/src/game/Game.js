@@ -5,8 +5,6 @@ import { AudioManager } from './AudioManager.js';
 import { NetworkManager } from './NetworkManager.js';
 import { SonicPulse } from './SonicPulse.js';
 import { setupControls } from '../utils/controls.js';
-import { BotManager } from './BotManager.js';
-
 
 export class Game {
     constructor(canvas) {
@@ -37,10 +35,23 @@ export class Game {
         
         // Game settings
         this.difficulty = 'medium';
-        this.gameMode = 'singleplayer';
+        this.gameMode = 'multiplayer'; // Set default to multiplayer
         
         // Create UI overlay
         this.createUIOverlay();
+        
+        // Pulse event listener
+        this.pulseAddedListener = this.handlePulseAdded.bind(this);
+        document.addEventListener('pulse-added', this.pulseAddedListener);
+    }
+    
+    // Handle pulse added event
+    handlePulseAdded(event) {
+        const pulse = event.detail.pulse;
+        this.addPulse(pulse);
+        
+        // Notify server about new pulse
+        this.networkManager.sendPulseCreated(pulse);
     }
     
     initThreeJS() {
@@ -89,19 +100,6 @@ export class Game {
         // Initialize AudioManager with scene (needed for visualizations)
         this.audioManager.setScene(this.scene);
         
-        // Initialize BotManager
-        this.botManager = new BotManager(this.scene, this.world, this.audioManager);
-        this.botManager.init();
-        
-        // Listen for pulse-added events from local player
-        document.addEventListener('pulse-added', (event) => {
-            const pulse = event.detail.pulse;
-            this.addPulse(pulse);
-            
-            // Notify server about new pulse
-            this.networkManager.sendPulseCreated(pulse);
-        });
-        
         // Setup health display
         this.updateHealthDisplay();
         
@@ -112,7 +110,7 @@ export class Game {
         this.networkManager.connect();
         
         // Start animation loop
-        this.animate();
+        this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
     }
     
     start() {
@@ -120,9 +118,6 @@ export class Game {
             this.isRunning = true;
             this.controls.lock();
             this.lastTime = performance.now();
-            // Activate bot manager and apply difficulty settings
-            this.botManager.setActive(true);
-            this.botManager.setDifficulty(this.difficulty);
         }
     }
     
@@ -133,7 +128,9 @@ export class Game {
         
         // Clear pulses
         this.pulses.forEach(pulse => {
-            this.scene.remove(pulse.mesh);
+            if (pulse.mesh && pulse.mesh.parent) {
+                this.scene.remove(pulse.mesh);
+            }
         });
         this.pulses = [];
         
@@ -141,8 +138,8 @@ export class Game {
         this.start();
     }
     
-    animate() {
-        requestAnimationFrame(this.animate.bind(this));
+    animate(timestamp) {
+        this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
         
         const currentTime = performance.now();
         const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 0.1); // Cap delta time
@@ -179,23 +176,28 @@ export class Game {
         
         // Update remote players
         for (const id in this.remotePlayers) {
-            this.remotePlayers[id].update(deltaTime);
-            this.remotePlayers[id].alignHealthBarToCamera(this.camera);
+            const player = this.remotePlayers[id];
+            if (player) {
+                player.update(deltaTime);
+                player.alignHealthBarToCamera(this.camera);
+            }
         }
         
         // Update sonic pulses
         this.updatePulses(deltaTime);
-        
-        // Update bots
-        if (this.botManager) {
-            this.botManager.update(deltaTime, this.player);
-        }
     }
     
     updatePulses(deltaTime) {
         // Update existing pulses
         for (let i = this.pulses.length - 1; i >= 0; i--) {
             const pulse = this.pulses[i];
+            
+            // Skip invalid pulses
+            if (!pulse || !pulse.position) {
+                this.pulses.splice(i, 1);
+                continue;
+            }
+            
             pulse.update(deltaTime, this.world);
             
             // Check for collisions with local player
@@ -207,7 +209,9 @@ export class Game {
                 this.updateHealthDisplay();
                 
                 // Remove pulse
-                this.scene.remove(pulse.mesh);
+                if (pulse.mesh && pulse.mesh.parent) {
+                    this.scene.remove(pulse.mesh);
+                }
                 this.pulses.splice(i, 1);
                 continue;
             }
@@ -218,39 +222,24 @@ export class Game {
                 if (id === pulse.player_id) continue;
                 
                 const remotePlayer = this.remotePlayers[id];
-                if (remotePlayer.checkPulseCollision(pulse)) {
+                if (remotePlayer && remotePlayer.checkPulseCollision(pulse)) {
                     // Notify server about damage
                     this.networkManager.sendDamageDealt(id, pulse.getDamage());
                     
                     // Remove pulse
-                    this.scene.remove(pulse.mesh);
+                    if (pulse.mesh && pulse.mesh.parent) {
+                        this.scene.remove(pulse.mesh);
+                    }
                     this.pulses.splice(i, 1);
                     break;
                 }
             }
             
-            // Check for collisions with bots
-            if (this.botManager && this.botManager.bots) {
-                for (const bot of this.botManager.bots) {
-                    // Ignore pulses fired by the bot itself
-                    if (pulse.sourceEnemy === bot) continue;
-                    
-                    // Simple distance-based collision check
-                    const distance = bot.position.distanceTo(pulse.position);
-                    if (distance < 1.0) { // Bot size + pulse size
-                        bot.takeDamage(pulse.getDamage());
-                        
-                        // Remove pulse after hit
-                        this.scene.remove(pulse.mesh);
-                        this.pulses.splice(i, 1);
-                        break;
-                    }
-                }
-            }
-            
             // Remove if expired
             if (pulse.lifeTime <= 0) {
-                this.scene.remove(pulse.mesh);
+                if (pulse.mesh && pulse.mesh.parent) {
+                    this.scene.remove(pulse.mesh);
+                }
                 this.pulses.splice(i, 1);
             }
         }
@@ -300,20 +289,22 @@ export class Game {
     
     updateHealthDisplay() {
         const healthFill = document.getElementById('health-fill');
-        healthFill.style.width = `${this.player.health}%`;
-        
-        // Change color based on health
-        if (this.player.health > 60) {
-            healthFill.style.backgroundColor = '#2ecc71';
-        } else if (this.player.health > 30) {
-            healthFill.style.backgroundColor = '#f39c12';
-        } else {
-            healthFill.style.backgroundColor = '#e74c3c';
-        }
-        
-        // Check if player is dead
-        if (this.player.health <= 0) {
-            this.playerDead();
+        if (healthFill) {
+            healthFill.style.width = `${this.player.health}%`;
+            
+            // Change color based on health
+            if (this.player.health > 60) {
+                healthFill.style.backgroundColor = '#2ecc71';
+            } else if (this.player.health > 30) {
+                healthFill.style.backgroundColor = '#f39c12';
+            } else {
+                healthFill.style.backgroundColor = '#e74c3c';
+            }
+            
+            // Check if player is dead
+            if (this.player.health <= 0) {
+                this.playerDead();
+            }
         }
     }
     
@@ -406,13 +397,13 @@ export class Game {
         
         // Create FPS display
         this.fpsDisplay = document.createElement('div');
-        this.fpsDisplay.style.color = 'red';
+        this.fpsDisplay.style.color = 'white';
         this.fpsDisplay.textContent = 'FPS: 0';
         this.overlay.appendChild(this.fpsDisplay);
         
         // Create players online display
         this.playersDisplay = document.createElement('div');
-        this.playersDisplay.style.color = 'red';
+        this.playersDisplay.style.color = 'white';
         this.playersDisplay.textContent = 'Players Online: 0';
         this.overlay.appendChild(this.playersDisplay);
         
@@ -456,11 +447,54 @@ export class Game {
             this.world.disableHighQualityEffects();
         }
         
-        // Update bot difficulty
-        if (this.botManager) {
-            this.botManager.setDifficulty(settings.difficulty);
+        console.log("Game settings updated:", settings);
+    }
+    
+    // Cleanup method to prevent memory leaks and animation loop issues
+    cleanup() {
+        // Cancel animation frame
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
         }
         
-        console.log("Game settings updated:", settings);
+        // Remove event listeners
+        document.removeEventListener('pulse-added', this.pulseAddedListener);
+        
+        // Dispose controls
+        if (this.controls && this.controls.dispose) {
+            this.controls.dispose();
+        }
+        
+        // Clean up audio manager visualizations
+        if (this.audioManager) {
+            this.audioManager.clearVisualizations();
+        }
+        
+        // Remove pulses
+        this.pulses.forEach(pulse => {
+            if (pulse.mesh && pulse.mesh.parent) {
+                this.scene.remove(pulse.mesh);
+            }
+        });
+        this.pulses = [];
+        
+        // Remove remote players
+        for (const id in this.remotePlayers) {
+            this.removeRemotePlayer(id);
+        }
+        this.remotePlayers = {};
+        
+        // Disconnect from server
+        if (this.networkManager) {
+            this.networkManager.disconnect();
+        }
+        
+        // Remove UI overlay
+        if (this.overlay && this.overlay.parentNode) {
+            this.overlay.parentNode.removeChild(this.overlay);
+        }
+        
+        console.log("Game cleaned up");
     }
 }
