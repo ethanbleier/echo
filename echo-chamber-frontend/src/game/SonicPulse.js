@@ -88,11 +88,20 @@ export class SonicPulse {
             // Calculate reflection direction
             this.direction.reflect(collision.normal);
             
+            // Apply material effects
+            this.applyMaterialEffects(collision.material);
+            
             // Increment bounce count
             this.bounceCount++;
             
-            // Increase damage multiplier
-            this.damageMultiplier *= this.bounceMultiplier;
+            // Increase damage multiplier based on material properties
+            const materialAmplification = collision.material ? 
+                collision.material.amplification : this.bounceMultiplier;
+            this.damageMultiplier *= materialAmplification;
+            
+            // Increase size slightly with each bounce
+            const sizeFactor = 1 + (this.bounceCount * 0.15);
+            this.mesh.scale.set(sizeFactor, sizeFactor, sizeFactor);
             
             // Change color based on bounce count to indicate power
             const colors = [0x3498db, 0x2ecc71, 0xf39c12, 0xe74c3c, 0x9b59b6];
@@ -103,24 +112,345 @@ export class SonicPulse {
             this.light.color.setHex(colors[colorIndex]);
             
             // Increase light intensity
-            this.light.intensity = 1 + (this.bounceCount * 0.5);
+            this.light.intensity = 1 + (this.bounceCount * 0.7);
+            
+            // Increase light distance
+            this.light.distance = 4 + (this.bounceCount * 1.5);
             
             // Create a bounce effect
-            this.createBounceEffect(collision.point, collision.normal);
+            this.createBounceEffect(collision.point, collision.normal, collision.material);
             
             // Destroy pulse if it reached max bounces
             if (this.bounceCount >= this.maxBounces) {
+                this.createExplosionEffect();
                 this.lifeTime = 0;
             }
         }
     }
     
-    createBounceEffect(position, normal) {
-        // This would create a visual effect at the bounce point
-        // For simplicity, we're just creating a placeholder
+    applyMaterialEffects(material) {
+        if (!material) return;
         
-        // In a full implementation, you'd create particle effects
-        // and play a sound at the bounce location
+        // Different materials have different effects
+        switch(true) {
+            case material.type === 'metal':
+                // Metal increases velocity and creates more intense bounce
+                this.speed *= 1.1;
+                break;
+                
+            case material.type === 'glass' && material.breakable:
+                // Glass breaks and gives a big one-time boost
+                this.damageMultiplier *= 1.5;
+                this.speed *= 1.3;
+                // Note: In a full implementation, you'd actually break the glass
+                break;
+                
+            case material.type === 'soft':
+                // Soft surfaces slow the pulse and reduce its power
+                this.speed *= 0.8;
+                this.damageMultiplier *= 0.8;
+                break;
+        }
+    }
+    
+    createBounceEffect(position, normal, material) {
+        // Create a temporary flash at bounce point
+        const flashGeometry = new THREE.SphereGeometry(0.3 + (this.bounceCount * 0.1), 16, 16);
+        const flashMaterial = new THREE.MeshBasicMaterial({
+            color: this.mesh.material.color,
+            transparent: true,
+            opacity: 0.7
+        });
+        
+        const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+        flash.position.copy(position);
+        this.mesh.parent.add(flash);
+        
+        // Create shockwave ring
+        const ringGeometry = new THREE.RingGeometry(0.1, 0.3, 16);
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            color: this.mesh.material.color,
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide
+        });
+        
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        ring.position.copy(position);
+        
+        // Orient the ring perpendicular to the surface normal
+        ring.lookAt(position.clone().add(normal));
+        
+        this.mesh.parent.add(ring);
+        
+        // Material-specific effects
+        if (material) {
+            if (material.type === 'metal') {
+                // Metal creates sparks
+                this.createSparkEffect(position, normal);
+            } else if (material.type === 'glass' && material.breakable) {
+                // Glass creates a shatter effect
+                this.createShatterEffect(position, normal);
+            }
+        }
+        
+        // Animate and remove after a short time
+        const startTime = performance.now();
+        const animateAndRemove = () => {
+            const elapsedTime = (performance.now() - startTime) / 1000;
+            
+            if (elapsedTime < 0.5) {
+                // Scale up the ring
+                const scale = 1 + elapsedTime * 6;
+                ring.scale.set(scale, scale, scale);
+                
+                // Fade out both effects
+                const opacity = 0.7 * (1 - elapsedTime * 2);
+                flash.material.opacity = opacity;
+                ring.material.opacity = opacity;
+                
+                // Continue animation
+                requestAnimationFrame(animateAndRemove);
+            } else {
+                // Remove effects
+                if (flash.parent) flash.parent.remove(flash);
+                if (ring.parent) ring.parent.remove(ring);
+            }
+        };
+        
+        // Start animation
+        animateAndRemove();
+    }
+    
+    createSparkEffect(position, normal) {
+        // Create a simple particle system for sparks
+        const sparkCount = 5 + this.bounceCount * 2;
+        const sparkGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+        const sparkMaterial = new THREE.MeshBasicMaterial({
+            color: 0xFFD700,
+            transparent: true,
+            opacity: 0.9
+        });
+        
+        const sparks = [];
+        
+        for (let i = 0; i < sparkCount; i++) {
+            const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
+            spark.position.copy(position);
+            
+            // Random direction based on surface normal
+            const randomDir = new THREE.Vector3(
+                normal.x + (Math.random() - 0.5) * 2,
+                normal.y + (Math.random() - 0.5) * 2,
+                normal.z + (Math.random() - 0.5) * 2
+            ).normalize();
+            
+            // Random speed
+            const speed = 2 + Math.random() * 3;
+            
+            // Store velocity and lifetime
+            spark.userData = {
+                velocity: randomDir.multiplyScalar(speed),
+                lifetime: 0.3 + Math.random() * 0.3
+            };
+            
+            this.mesh.parent.add(spark);
+            sparks.push(spark);
+        }
+        
+        // Animate sparks
+        const startTime = performance.now();
+        const animateSparks = () => {
+            const elapsedTime = (performance.now() - startTime) / 1000;
+            let allExpired = true;
+            
+            for (const spark of sparks) {
+                if (spark.userData.lifetime > elapsedTime) {
+                    allExpired = false;
+                    
+                    // Move spark
+                    spark.position.add(
+                        spark.userData.velocity.clone().multiplyScalar(0.016) // Assuming ~60fps
+                    );
+                    
+                    // Add gravity
+                    spark.userData.velocity.y -= 9.8 * 0.016;
+                    
+                    // Fade out
+                    const progress = elapsedTime / spark.userData.lifetime;
+                    spark.material.opacity = 0.9 * (1 - progress);
+                } else if (spark.parent) {
+                    // Remove expired spark
+                    spark.parent.remove(spark);
+                }
+            }
+            
+            if (!allExpired) {
+                requestAnimationFrame(animateSparks);
+            }
+        };
+        
+        // Start animation
+        animateSparks();
+    }
+    
+    createShatterEffect(position, normal) {
+        // Create glass shatter effect
+        const shardCount = 8 + this.bounceCount * 2;
+        const shardMaterial = new THREE.MeshBasicMaterial({
+            color: 0x88CCEE,
+            transparent: true,
+            opacity: 0.6,
+            side: THREE.DoubleSide
+        });
+        
+        const shards = [];
+        
+        for (let i = 0; i < shardCount; i++) {
+            // Create random triangle
+            const size = 0.1 + Math.random() * 0.15;
+            const shardGeometry = new THREE.BufferGeometry();
+            
+            // Create triangle vertices around position
+            const vertices = new Float32Array([
+                0, 0, 0,
+                size * (Math.random() - 0.5), size * (Math.random() - 0.5), size * (Math.random() - 0.5),
+                size * (Math.random() - 0.5), size * (Math.random() - 0.5), size * (Math.random() - 0.5)
+            ]);
+            
+            shardGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            
+            const shard = new THREE.Mesh(shardGeometry, shardMaterial);
+            shard.position.copy(position);
+            
+            // Random direction away from normal
+            const randomDir = new THREE.Vector3(
+                normal.x + (Math.random() - 0.5) * 1.5,
+                normal.y + (Math.random() - 0.5) * 1.5,
+                normal.z + (Math.random() - 0.5) * 1.5
+            ).normalize();
+            
+            // Random speed
+            const speed = 1 + Math.random() * 2;
+            
+            // Random rotation
+            const rotationSpeed = new THREE.Vector3(
+                Math.random() * 10,
+                Math.random() * 10,
+                Math.random() * 10
+            );
+            
+            // Store velocity, rotation and lifetime
+            shard.userData = {
+                velocity: randomDir.multiplyScalar(speed),
+                rotationSpeed: rotationSpeed,
+                lifetime: 0.5 + Math.random() * 0.5
+            };
+            
+            this.mesh.parent.add(shard);
+            shards.push(shard);
+        }
+        
+        // Animate shards
+        const startTime = performance.now();
+        const animateShards = () => {
+            const elapsedTime = (performance.now() - startTime) / 1000;
+            let allExpired = true;
+            
+            for (const shard of shards) {
+                if (shard.userData.lifetime > elapsedTime) {
+                    allExpired = false;
+                    
+                    // Move shard
+                    shard.position.add(
+                        shard.userData.velocity.clone().multiplyScalar(0.016) // Assuming ~60fps
+                    );
+                    
+                    // Rotate shard
+                    shard.rotation.x += shard.userData.rotationSpeed.x * 0.016;
+                    shard.rotation.y += shard.userData.rotationSpeed.y * 0.016;
+                    shard.rotation.z += shard.userData.rotationSpeed.z * 0.016;
+                    
+                    // Add gravity
+                    shard.userData.velocity.y -= 9.8 * 0.016;
+                    
+                    // Fade out
+                    const progress = elapsedTime / shard.userData.lifetime;
+                    shard.material.opacity = 0.6 * (1 - progress);
+                } else if (shard.parent) {
+                    // Remove expired shard
+                    shard.parent.remove(shard);
+                }
+            }
+            
+            if (!allExpired) {
+                requestAnimationFrame(animateShards);
+            }
+        };
+        
+        // Start animation
+        animateShards();
+    }
+    
+    createExplosionEffect() {
+        // Create explosion effect when pulse expires after max bounces
+        const explosionGeometry = new THREE.SphereGeometry(1 + (this.bounceCount * 0.3), 32, 32);
+        const explosionMaterial = new THREE.MeshBasicMaterial({
+            color: this.mesh.material.color,
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
+        explosion.position.copy(this.position);
+        this.mesh.parent.add(explosion);
+        
+        // Create shockwave ring
+        const ringGeometry = new THREE.RingGeometry(0.2, 0.4, 32);
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            color: this.mesh.material.color,
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide
+        });
+        
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        ring.position.copy(this.position);
+        
+        // Align ring with camera (always face camera)
+        ring.lookAt(this.mesh.parent.getWorldPosition(new THREE.Vector3()));
+        
+        this.mesh.parent.add(ring);
+        
+        // Animate explosion
+        const startTime = performance.now();
+        const animateExplosion = () => {
+            const elapsedTime = (performance.now() - startTime) / 1000;
+            
+            if (elapsedTime < 0.7) {
+                // Scale up the explosion and ring
+                const explosionScale = 1 + elapsedTime * 10;
+                explosion.scale.set(explosionScale, explosionScale, explosionScale);
+                
+                const ringScale = 1 + elapsedTime * 15;
+                ring.scale.set(ringScale, ringScale, 1);
+                
+                // Fade out
+                const opacity = 0.8 * (1 - elapsedTime / 0.7);
+                explosion.material.opacity = opacity;
+                ring.material.opacity = opacity;
+                
+                // Continue animation
+                requestAnimationFrame(animateExplosion);
+            } else {
+                // Remove effects
+                if (explosion.parent) explosion.parent.remove(explosion);
+                if (ring.parent) ring.parent.remove(ring);
+            }
+        };
+        
+        // Start animation
+        animateExplosion();
     }
     
     createRippleEffect(deltaTime) {

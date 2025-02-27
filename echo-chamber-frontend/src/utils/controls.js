@@ -1,3 +1,5 @@
+// Fix for echo-chamber-frontend/src/utils/controls.js
+
 export function setupControls(camera, canvas) {
     // We'll use a simple event-based system instead of custom PointerLockControls
     let isLocked = false;
@@ -116,12 +118,12 @@ export function setupControls(camera, canvas) {
             
             // Forward/backward movement along camera's forward direction
             if (keys.forward) {
-                // W key should move forward (in THREE.js forward is typically -Z, but we need to invert it)
-                moveDirection.z += 1;
+                // W key should move forward (in THREE.js forward is -Z)
+                moveDirection.z -= 1;
             }
             if (keys.backward) {
                 // S key should move backward
-                moveDirection.z -= 1;
+                moveDirection.z += 1;
             }
             
             // Left/right movement perpendicular to camera's forward direction

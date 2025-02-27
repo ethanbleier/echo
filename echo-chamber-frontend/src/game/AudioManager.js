@@ -7,24 +7,38 @@ export class AudioManager {
         // Sound buffer cache
         this.sounds = {};
         
+        // Set default volume
+        this.masterVolume = 0.75; // 75%
+        
         // Load sound files
         this.preloadSounds();
+    }
+    
+    setVolume(volume) {
+        // Set master volume (0-1)
+        this.masterVolume = Math.max(0, Math.min(1, volume));
+        
+        // Apply to all sounds
+        for (const sound of Object.values(this.sounds)) {
+            sound.setVolume(this.masterVolume);
+        }
     }
     
     preloadSounds() {
         // Create a sound loader
         const audioLoader = new THREE.AudioLoader();
         
-        // Define sounds to load
-        // In a real implementation, you'd load actual sound files
-        // For this prototype, we'll just define the sounds we would load
+        // Define sounds to load - updated to match available assets
         const soundFiles = {
-            fireWeapon: 'sounds/fire_sonic_pulse.mp3',
-            pulseImpact: 'sounds/pulse_impact.mp3',
-            pulseRicochet: 'sounds/pulse_ricochet.mp3',
-            takeDamage: 'sounds/take_damage.mp3',
-            recharge: 'sounds/recharge.mp3',
-            jump: 'sounds/jump.mp3'
+            fireWeapon: '../sounds/fire_sonic_pulse.mp3',
+            enemyFireWeapon: '../assets/sounds/enemy_fire_sonic_pulse.mp3',
+            weaponRecharge: '../assets/sounds/weapon_recharge.mp3',
+            weaponEmpty: '../assets/sounds/weapon_empty.mp3',
+            // Commented out unavailable sounds:
+            // pulseImpact: 'sounds/pulse_impact.mp3',
+            pulseRicochet: '../assets/sounds/pulse_ricochet.mp3',
+            // takeDamage: 'sounds/take_damage.mp3',
+            jump: '../assets/sounds/jump.wav'
         };
         
         // Loop through sound files and load them
@@ -99,8 +113,8 @@ export class AudioManager {
         // Create a visual and audio ripple effect for sonic pulses
         // This would be a more complex implementation in a full game
         
-        // Play sound with position
-        this.playSound('pulseRicochet', position);
+        // Commented out as we don't have the pulseRicochet sound yet
+        // this.playSound('pulseRicochet', position);
         
         // Scale sound volume based on intensity
         // In a real implementation, you'd adjust the volume
