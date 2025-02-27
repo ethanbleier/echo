@@ -128,6 +128,13 @@ export class AudioManager {
     }
     
     playSound(name, position = null) {
+        // Check if audio is initialized
+        if (!this.isAudioInitialized) {
+            console.log(`Sound "${name}" queued - waiting for audio initialization`);
+            this.pendingSounds.push({ name, position });
+            return null;
+        }
+        
         // Check if the buffer exists
         if (!this.buffers[name]) {
             console.error(`Sound "${name}" not found or not loaded yet.`);

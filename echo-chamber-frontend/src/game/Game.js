@@ -93,7 +93,11 @@ export class Game {
         document.addEventListener('pulse-added', (event) => {
             const pulse = event.detail.pulse;
             this.addPulse(pulse);
-            
+
+            this.audioManager.setScene(this.scene);
+            this.botManager.init();
+
+
             // Notify server about new pulse
             this.networkManager.sendPulseCreated(pulse);
         });
@@ -116,6 +120,9 @@ export class Game {
             this.isRunning = true;
             this.controls.lock();
             this.lastTime = performance.now();
+            // Activate bot manager and apply difficulty settings
+            this.botManager.setActive(true);
+            this.botManager.setDifficulty(this.difficulty);
         }
     }
     
@@ -178,8 +185,33 @@ export class Game {
         
         // Update sonic pulses
         this.updatePulses(deltaTime);
+
+        this.gameLoop = function(deltaTime) {
+            // Update controls
+            if (this.controls.isLocked()) {
+                this.controls.update(deltaTime);
+            }
+            
+            // Update player
+            this.player.update(deltaTime, this.world);
+            
+            // Send player position to server
+            this.networkManager.sendPlayerPosition();
+            
+            // Update remote players
+            for (const id in this.remotePlayers) {
+                this.remotePlayers[id].update(deltaTime);
+                this.remotePlayers[id].alignHealthBarToCamera(this.camera);
+            }
+            
+            // Update sonic pulses
+            this.updatePulses(deltaTime);
+            
+            // Add this line to update bots
+            this.botManager.update(deltaTime, this.player);
+        }
     }
-    
+
     updatePulses(deltaTime) {
         // Update existing pulses
         for (let i = this.pulses.length - 1; i >= 0; i--) {
@@ -409,5 +441,25 @@ export class Game {
             const playersCount = Object.keys(this.remotePlayers).length + 1;
             this.playersDisplay.textContent = `Players Online: ${playersCount}`;
         }
+    }
+
+    updateSettings(settings) {
+        this.gameMode = settings.gameMode;
+        this.difficulty = settings.difficulty;
+        
+        // Update audio volume
+        this.audioManager.setVolume(settings.volume / 100);
+        
+        // Update world settings
+        if (settings.highQualitySoundViz) {
+            this.world.enableHighQualityEffects();
+        } else {
+            this.world.disableHighQualityEffects();
+        }
+        
+        // Update bot difficulty
+        this.botManager.setDifficulty(settings.difficulty);
+        
+        console.log("Game settings updated:", settings);
     }
 }
