@@ -1,27 +1,48 @@
-# Echo Chamber: Resonance Rumble
+# Echo Chamber: Resonance Rumble (In development!)
 
 A multiplayer FPS where sound is both your weapon and your enemy. Players wield sonic rifles that fire pulses, which grow deadlier with each bounce. Every shot reveals your position to opponents who can track the noise.
+
+
+<div align="center">
+<h1><a href="https://game.ethanbleier.com">Play online here!</a></h1>
+</div>
+
+
+![Game Screenshot](screenshot.png)
+
 
 ## Game Overview
 
 Echo Chamber: Resonance Rumble is a unique FPS focused on sound mechanics:
-- Sonic pulses gain power with each bounce off walls
-- Different materials affect sound propagation (metal amplifies, soft surfaces dampen)
-- Stealth and sound tracking are key tactical elements
+- **Sonic Pulses**: Shots gain power with each bounce off surfaces
+- **Material Interaction**: Different materials affect sound propagation (metal amplifies, glass shatters for big boosts, soft surfaces dampen)
+- **Sound Tracking**: Every shot creates visible sound waves that opponents can see and hear
+- **Stealth vs Aggression**: Choose your playstyle - quiet stalking or loud, chaotic combat
 
-## Setup Instructions
+## Features
+
+- **Real-time Multiplayer**: Play with friends over WebSockets
+- **Dynamic Sound Visualization**: See sound waves propagate through the environment
+- **Physics-Based Gameplay**: Calculate ricochets for trick shots around corners
+- **Material-Based Environment**: Strategic use of different surfaces for tactical advantage
+- **Cross-Platform Play**: Works on any modern browser, performs great on firefox
+- **No mobile support**: I'm working on it!
+
+## Quick Start
 
 ### Prerequisites
 - Python 3.7+ for the WebSocket server
-- Modern web browser (Chrome, Firefox, Edge)
-- Basic knowledge of running terminal commands
+
+#### Modern web browser 
+- Chrome and Firefox are best 
+- Safari caps fps at 60
 
 ### Installation
 
 1. Clone the repository:
    ```
-   git clone <your-repository-url>
-   cd echo-chamber
+   git clone https://github.com/ethanbleier/echo.git
+   cd echo
    ```
 
 2. Install Python dependencies:
@@ -29,33 +50,20 @@ Echo Chamber: Resonance Rumble is a unique FPS focused on sound mechanics:
    pip install -r requirements.txt
    ```
 
-3. Configure environment variables (optional):
-   - Create a `.env` file in the root directory
-   - Add `PORT=8765` or your preferred port number
-
-### Running the Game
-
-1. Start the WebSocket server:
+3. Start the WebSocket server:
    ```
    python server.py
    ```
-   You should see a message: "Echo Chamber multiplayer server started on port 8765"
 
-2. Serve the frontend files using a simple HTTP server:
+4. Serve the frontend files:
    ```
    cd echo-chamber-frontend
    python -m http.server 8000
    ```
-   Or use any other HTTP server of your choice.
 
-3. Open your browser and navigate to:
+5. Open your browser and navigate to:
    ```
    http://localhost:8000
-   ```
-
-4. To play with others on your local network, they can connect to your IP address:
-   ```
-   http://<your-ip-address>:8000
    ```
 
 ## Game Controls
@@ -66,90 +74,119 @@ Echo Chamber: Resonance Rumble is a unique FPS focused on sound mechanics:
 - **Space**: Jump
 - **ESC**: Unlock mouse cursor
 
-## Troubleshooting
+## Game Mode Concepts (TODO)
 
-### Game crashes after a few seconds
-If you see infinite animation errors in the console, make sure you're using the fixed versions of:
-- Game.js
-- BotManager.js
-- AudioManager.js
+- **Resonance Deathmatch** (4-8 players): Free-for-all with trick shots and sound tracking
+- **Echo Hunt** (2v2 or 3v3): Team-based objective mode with a sound-emitting beacon
+- **Amplify King** (6 players): King of the Hill with sonic amplification in the central zone
 
-These files have been modified to prevent memory leaks and properly handle animations.
+## Technical Details
 
-### Cannot connect to multiplayer
-- Ensure the WebSocket server is running (python server.py)
-- Check your firewall settings to allow connections on ports 8765 and 8000
-- Verify that your .env file has the correct PORT setting if you changed it
+### Architecture
 
-### Sound not working
-The game uses fallback sounds if it can't load audio files. To add your own sounds:
-1. Create a directory at `echo-chamber-frontend/src/assets/sounds/`
-2. Add the following sound files:
-   - fire.mp3
-   - enemy_fire.mp3
-   - empty.mp3
-   - ricochet.mp3
-   - damage.wav
-   - jump.wav
+The game is split into two main components:
 
-## Game Modes
+1. **Python WebSocket Server**
+   - Handles player connections and disconnections
+   - Broadcasts player positions (10 updates per second)
+   - Manages game state (player health, sonic pulses)
+   - Handles respawn mechanics
 
-- **Resonance Deathmatch**: Classic free-for-all (4-8 players)
-- **Echo Hunt**: Team-based objective mode (2v2 or 3v3)
-- **Amplify King**: King of the Hill with sonic amplification (6 players)
-
-## Development Notes
-
-### File Structure
-
-![Project File Structure](file-structure.png)
-
-
+2. **JavaScript Frontend**
+   - Three.js for 3D rendering
+   - Custom physics for sonic pulse propagation
+   - Audio visualization system
+   - Network synchronization
 
 ### Key Files
-- `server.py`: WebSocket server for multiplayer
-- `Game.js`: Main game logic
-- `AudioManager.js`: Sound system and visualizations
-- `BotManager.js`: AI opponents logic
-- `World.js`: Level and environment handling
-- `SonicPulse.js`: Projectile mechanics
 
-### Known Issues
-- Bot spawning may sometimes conflict with walls
-- Mobile devices are not fully supported
-- Some sound effects may not load in certain browsers
+- `server.py`: WebSocket server implementation
+- `echo-chamber-frontend/src/game/Game.js`: Main game loop and logic
+- `echo-chamber-frontend/src/game/SonicPulse.js`: Projectile mechanics
+- `echo-chamber-frontend/src/game/World.js`: Environment and material interactions
+- `echo-chamber-frontend/src/game/NetworkManager.js`: Client-server communication
+
+## Deployment
+
+### Local Network Play
+
+To allow players on your local network:
+
+1. Find your local IP address
+2. Set the `HOST` environment variable:
+   ```
+   export HOST="0.0.0.0"  # Listen on all interfaces
+   ```
+3. Share your IP address with players:
+   ```
+   http://your-local-ip:8000
+   ```
+
+### Web Hosting
+
+For hosting on a web server:
+
+1. Set up a reverse proxy for the WebSocket server
+2. Configure CORS for your domain
+3. Ensure WebSocket connections are properly forwarded
+
+Sample PHP proxy is included in `ws-proxy.php` for shared hosting environments.
+
+## Development
+
+### Adding New Materials
+
+Materials define how sonic pulses interact with surfaces:
+
+```javascript
+// Add new material in World.js
+this.materials = {
+    // ...existing materials...
+    newMaterial: {
+        color: 0xHEXCODE,
+        amplification: 1.2,  // How much pulse damage increases
+        absorption: 0.4      // How quickly sound dissipates
+    }
+};
+```
+
+### Creating Custom Maps
+
+To create a new level:
+
+1. Modify `World.js` createTestLevel function
+2. Add walls with different materials
+3. Configure spawn points in `BotManager.js`
+
+## Troubleshooting
+
+### WebSocket Connection Issues
+
+- Check that the server is running (`python server.py`)
+- Verify firewall settings allow connections on port 8765
+- For hosted environments, ensure WebSocket proxying is configured correctly
+
+### Performance Problems
+
+If experiencing lag:
+
+1. Disable high-quality sound visualization in settings
+2. Reduce game resolution in your browser
+3. Close other resource-intensive applications
 
 ## Contributing
 
-Contributions are welcome! Feel free to submit pull requests or open issues for bugs and feature requests.
+Contributions are welcome! Please feel free to submit pull requests for:
+
+- New game modes
+- Additional materials with unique sound properties
+- Performance optimizations
+- Bug fixes
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+## Credits
 
-
-
-## Core Mechanics
-
-  * Sonic Arsenal: Everyone starts with a base sonic rifle. Pulses deal low damage on direct hits (say, 20HP), but each bounce off a wall or object adds power (up to 100HP after 3-4 ricochets). You aim for trick shots—banking pulses around corners or through tunnels—to catch foes off guard.
-
-   * Sound Tracking: Every shot emits a visible soundwave (a faint ripple on-screen) and an audible ping that enemies can hear. Skilled players can pinpoint your location by sound alone, so firing is a calculated risk. Silence is your shield.
-
-  * Environmental Play: Maps are littered with materials that affect pulses—metal walls amplify damage and range, glass shatters for one-time big booms, and soft surfaces (like moss or curtains) dampen shots entirely. Players learn the terrain to dominate.
-
-## Multiplayer Modes
-
-   *  Resonance Deathmatch (4-8 players): Free-for-all chaos. Most kills in 10 minutes wins. Maps are small, with crisscrossing corridors and reflective surfaces to encourage wild ricochet plays. Quiet players stalk, loud ones brawl—your style decides your fate.
-   
-  * Echo Hunt (2v2 or 3v3): Team-based elimination. One team starts with a “beacon” (a pulsing objective that emits faint noise). Defenders protect it while attackers use sound cues to locate and destroy it. First to three wins. Stealth versus aggression in tense rounds.
-  * 
-  * Amplify King (6 players): King of the Hill with a twist—a central zone boosts your sonic pulses’ power and range while you hold it. Everyone hears your shots louder, making you a target. Hold the zone longest without dying to win, balancing offense and defense.
-
-## Extra Flavor
-
-  * Upgrades & Gadgets: Scavenge in-match for mods like a “mute shot” (one silent pulse), a decoy emitter (throws fake sound elsewhere), or a high-frequency burst (short-range AOE stun). Keeps matches dynamic.
-    
-  * Audio Cues: Headphones are king—3D sound design lets you hear shots and footsteps with eerie precision. A good player can “see” the map through sound alone.
-
-  * Maps: Think industrial labyrinths, abandoned concert halls, or crystal caves—places where sound bounces and distorts. Maybe a map with a central gong that, if shot, deafens everyone for 10 seconds (chaos ensues).
+   Steak and coffee
