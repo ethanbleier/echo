@@ -167,6 +167,15 @@ export class Player {
         grip.position.z = -0.15;
         this.weaponGroup.add(grip);
         
+        // Add decorative details
+        this.addWeaponDetails();
+        
+        // Add a subtle point light for emitter glow
+        const emitterLight = new THREE.PointLight(0x3498db, 0.8, 0.5);
+        emitterLight.position.copy(this.emitter.position);
+        this.weaponGroup.add(emitterLight);
+        this.emitterLight = emitterLight;
+        
         // Position the weapon in front of camera
         this.weaponGroup.position.set(0.3, -0.3, -0.5);
         
@@ -176,6 +185,99 @@ export class Player {
         
         // Add weapon to camera (so it moves with camera)
         this.camera.add(this.weaponGroup);
+        
+        // Set up proper shadows
+        this.weaponGroup.traverse(child => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+    }
+    
+    addWeaponDetails() {
+        // Add sight on top
+        const sightBaseGeometry = new THREE.BoxGeometry(0.08, 0.02, 0.1);
+        const sightBaseMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x222222,
+            roughness: 0.8 
+        });
+        const sightBase = new THREE.Mesh(sightBaseGeometry, sightBaseMaterial);
+        sightBase.position.set(0, 0.06, -0.2);
+        this.weaponGroup.add(sightBase);
+        
+        // Add front sight post
+        const frontSightGeometry = new THREE.BoxGeometry(0.01, 0.03, 0.01);
+        const frontSightMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x444444,
+            roughness: 0.7 
+        });
+        const frontSight = new THREE.Mesh(frontSightGeometry, frontSightMaterial);
+        frontSight.position.set(0, 0.085, -0.4);
+        this.weaponGroup.add(frontSight);
+        
+        // Add energy coils around barrel
+        this.createEnergyCoils();
+        
+        // Add side panels
+        const panelGeometry = new THREE.BoxGeometry(0.01, 0.08, 0.3);
+        const panelMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x3498db,
+            emissive: 0x3498db,
+            emissiveIntensity: 0.2,
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        const leftPanel = new THREE.Mesh(panelGeometry, panelMaterial);
+        leftPanel.position.set(-0.06, -0.01, -0.25);
+        this.weaponGroup.add(leftPanel);
+        
+        const rightPanel = new THREE.Mesh(panelGeometry, panelMaterial);
+        rightPanel.position.set(0.06, -0.01, -0.25);
+        this.weaponGroup.add(rightPanel);
+    }
+    
+    createEnergyCoils() {
+        // Create a helix around the barrel
+        const coilRadius = 0.06;
+        const coilTurns = 5;
+        const coilSegments = coilTurns * 8;
+        const coilTubeRadius = 0.005;
+        
+        const curve = new THREE.CatmullRomCurve3([]);
+        
+        // Generate the coil points
+        for (let i = 0; i <= coilSegments; i++) {
+            const t = i / coilSegments;
+            const angle = t * Math.PI * 2 * coilTurns;
+            const z = -0.3 - (t * 0.4); // Start at -0.3 and go forward 0.4 units
+            
+            const x = Math.cos(angle) * coilRadius;
+            const y = Math.sin(angle) * coilRadius;
+            
+            curve.points.push(new THREE.Vector3(x, y, z));
+        }
+        
+        // Create tube geometry from the curve
+        const tubeGeometry = new THREE.TubeGeometry(
+            curve,
+            coilSegments,
+            coilTubeRadius,
+            8,
+            false
+        );
+        
+        // Create glowing material for the coil
+        const tubeMaterial = new THREE.MeshBasicMaterial({
+            color: 0x3498db,
+            transparent: true,
+            opacity: 0.7
+        });
+        
+        const coilMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+        this.weaponGroup.add(coilMesh);
+        this.energyCoil = coilMesh;
     }
     
     updateWeapon(deltaTime) {
@@ -189,7 +291,12 @@ export class Player {
         
         // Apply subtle bobbing effect
         const bobAmount = 0.02;
+        const horizontalBob = Math.sin(this.weaponBob * 0.5) * 0.01;
         this.weaponGroup.position.y = -0.3 + Math.sin(this.weaponBob) * bobAmount;
+        this.weaponGroup.position.x = 0.3 + horizontalBob;
+        
+        // Add slight rotation bobbing
+        this.weaponGroup.rotation.z = horizontalBob * 0.5;
         
         // Handle recoil animation
         if (this.weaponRecoil > 0) {
@@ -197,14 +304,41 @@ export class Player {
             if (this.weaponRecoil < 0) this.weaponRecoil = 0;
         }
         
-        // Apply recoil position
+        // Apply recoil position and rotation
         this.weaponGroup.position.z = -0.5 - (this.weaponRecoil * 0.1);
+        this.weaponGroup.rotation.x = -this.weaponRecoil * 0.2;
         
-        // Animate emitter glow when firing
+        // Animate emitter glow based on firing state
         if (this.nextFireTime > this.fireRate - 0.1) {
             this.emitter.material.emissiveIntensity = 2;
+            if (this.emitterLight) this.emitterLight.intensity = 2;
+            
+            // Pulse energy coils during firing
+            if (this.energyCoil) {
+                this.energyCoil.material.opacity = 0.9;
+                this.energyCoil.material.color.setHex(0x5DADE2);
+            }
         } else {
-            this.emitter.material.emissiveIntensity = 0.5;
+            // Pulse the emitter slightly when idle
+            const pulseRate = Math.sin(performance.now() * 0.003) * 0.5 + 0.5;
+            this.emitter.material.emissiveIntensity = 0.5 + pulseRate * 0.3;
+            if (this.emitterLight) this.emitterLight.intensity = 0.5 + pulseRate * 0.3;
+            
+            // Subtle animation for energy coils when idle
+            if (this.energyCoil) {
+                this.energyCoil.material.opacity = 0.6 + pulseRate * 0.1;
+                this.energyCoil.material.color.setHex(0x3498db);
+            }
+        }
+        
+        // Pulse energy recharge indicator when recharging pulses
+        if (this.pulseCount < this.maxPulses && this.pulseRechargeTimer > 0) {
+            const rechargeProgress = this.pulseRechargeTimer / this.pulseRechargeTime;
+            const pulseIntensity = Math.sin(rechargeProgress * Math.PI * 10) * 0.5 + 0.5;
+            
+            if (this.energyCoil) {
+                this.energyCoil.material.opacity = 0.6 + pulseIntensity * 0.3;
+            }
         }
     }
     
@@ -356,7 +490,7 @@ export class Player {
                 this.pulseRechargeTimer = 0;
                 
                 // Play recharge sound
-                this.audioManager.playSound('recharge');
+                // this.audioManager.playSound('recharge');
             }
         }
     }

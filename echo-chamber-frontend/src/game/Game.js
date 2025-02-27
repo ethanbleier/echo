@@ -5,6 +5,8 @@ import { AudioManager } from './AudioManager.js';
 import { NetworkManager } from './NetworkManager.js';
 import { SonicPulse } from './SonicPulse.js';
 import { setupControls } from '../utils/controls.js';
+import { BotManager } from './BotManager.js';
+
 
 export class Game {
     constructor(canvas) {
@@ -29,9 +31,16 @@ export class Game {
         // Set up controls
         this.controls = setupControls(this.camera, this.canvas);
         
+        // Create bot manager
+        this.botManager = new BotManager(this.scene, this.world, this.audioManager);
+        
         // Game state
         this.remotePlayers = {};
         this.pulses = [];
+        
+        // Game settings
+        this.difficulty = 'medium';
+        this.gameMode = 'singleplayer';
         
         // Create UI overlay
         this.createUIOverlay();
