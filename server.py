@@ -11,6 +11,7 @@ import sys
 
 # Load environment variables from .env file
 load_dotenv()
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -25,7 +26,8 @@ logging.basicConfig(
 PORT = int(os.environ.get('PORT', 8765))
 
 # Get host from environment variable or use default
-HOST = os.environ.get('HOST', '127.0.0.1')  # Use 127.0.0.1 for production behind proxy
+# Using 0.0.0.0 to listen on all interfaces, which is important for accepting connections
+HOST = os.environ.get('HOST', '0.0.0.0')
 
 # Game state
 connected_players = {}
@@ -235,7 +237,7 @@ async def handle_message(websocket, player_id, message):
     except Exception as e:
         logging.error(f"Error processing message: {e}")
 
-async def game_server(websocket):
+async def game_server(websocket, path):
     """Handle a connection from a client."""
     player_id = await register_player(websocket)
     
@@ -270,16 +272,12 @@ async def main():
     # Start the game state broadcaster
     broadcast_task = asyncio.create_task(broadcast_game_state())
     
-    # Set allowed origins
-    origins = ["https://game.ethanbleier.com"]
-    
     # Start the websocket server
     global server
     server = await websockets.serve(
         game_server, 
         HOST, 
-        PORT, 
-        origins=origins,
+        PORT,
         ping_interval=20,  # Send ping every 20 seconds
         ping_timeout=60    # Wait 60 seconds for pong before considering connection dead
     )

@@ -4,7 +4,10 @@ export class NetworkManager {
         this.socket = null;
         this.playerId = null;
         this.connected = false;
-        this.serverUrl = 'wss://game.ethanbleier.com';
+        
+        // Set up WebSocket URL based on current window location
+        this.serverUrl = this.getWebSocketUrl();
+        
         this.lastPositionUpdate = 0;
         this.positionUpdateInterval = 100; // 100ms = 10 updates per second
         this.reconnectAttempts = 0;
@@ -15,9 +18,19 @@ export class NetworkManager {
         this.updateConnectionStatus('Connecting to server...');
     }
     
+    // Determine the WebSocket URL based on the current page location
+    getWebSocketUrl() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.hostname;
+        const port = 8765; // Default WebSocket port
+        
+        return `${protocol}//${host}:${port}`;
+    }
+    
     connect() {
         try {
-            this.updateConnectionStatus('Connecting to server...');
+            this.updateConnectionStatus(`Connecting to server at ${this.serverUrl}...`);
+            console.log(`Attempting to connect to WebSocket server at: ${this.serverUrl}`);
             
             this.socket = new WebSocket(this.serverUrl);
             
@@ -51,7 +64,7 @@ export class NetworkManager {
             
             this.socket.onerror = (error) => {
                 console.error('WebSocket error:', error);
-                this.updateConnectionStatus('Connection error');
+                this.updateConnectionStatus(`Connection error: Unable to connect to ${this.serverUrl}`);
             };
             
             this.socket.onmessage = (event) => {
@@ -79,7 +92,7 @@ export class NetworkManager {
                 }
             }, timeout);
         } else {
-            this.updateConnectionStatus('Could not connect to server. Please refresh the page to try again.');
+            this.updateConnectionStatus(`Could not connect to server at ${this.serverUrl}. Please check the server or try again later.`);
         }
     }
     
