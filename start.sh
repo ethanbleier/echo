@@ -1,48 +1,28 @@
 #!/bin/bash
 
-# start.sh - Echo Chamber: Resonance Rumble startup script
+# Define paths
+PYTHON_PATH=~/virtualenv/public_html/game/3.10/bin/python3
+PIP_PATH=~/virtualenv/public_html/game/3.10/bin/pip3
+APP_DIR="/home4/ethanble/public_html/game"
 
-# Check if Python is installed
-if ! command -v python3 &> /dev/null; then
-   echo "Python 3 is required but not installed. Please install Python 3."
-   exit 1
-fi
+# Navigate to application directory
+cd $APP_DIR
 
-# Create and activate virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
-   echo "Creating virtual environment..."
-   python3 -m venv venv
-fi
+echo "Using Python: $PYTHON_PATH"
+echo "Using Pip: $PIP_PATH"
 
-# Activate virtual environment
-echo "Activating virtual environment..."
-source venv/bin/activate
-
-# Install dependencies
 echo "Installing dependencies..."
-pip install -r requirements.txt
+$PIP_PATH install -r requirements.txt
 
-# Start the WebSocket server
 echo "Starting Echo Chamber WebSocket server..."
-python server.py &
-SERVER_PID=$!
+$PYTHON_PATH server.py &
+WS_PID=$!
 
-# Start HTTP server for frontend
-echo "Starting HTTP server for frontend..."
-cd echo-chamber-frontend
-python -m http.server 8000 &
-HTTP_PID=$!
+echo "Echo Chamber WebSocket server is running on port 8765!"
+echo "Press Ctrl+C to stop the server"
 
-cd ..
+# Trap SIGINT and SIGTERM signals to properly shut down
+trap "echo 'Stopping servers...'; kill $WS_PID; exit" SIGINT SIGTERM
 
-echo "Echo Chamber is running!"
-echo "WebSocket server on port 8765"
-echo "Frontend available at http://localhost:8000"
-echo ""
-echo "Press Ctrl+C to stop all servers"
-
-# Trap SIGINT to properly stop servers
-trap "kill $SERVER_PID $HTTP_PID; exit" INT
-
-# Wait for user to terminate
+# Keep script running
 wait
