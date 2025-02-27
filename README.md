@@ -126,13 +126,9 @@ Contributions are welcome! Feel free to submit pull requests or open issues for 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-=======
-# echo
 
 
- A multiplayer FPS where sound is both your weapon and your enemy. Players wield sonic rifles that fire pulses, which grow deadlier with each bounce, but every shot reveals your position to opponents who can track the noise. It’s a mix of stealth, strategy, and chaotic shootouts in tight, reflective arenas. 
 
- --
 
 ## Core Mechanics
 
